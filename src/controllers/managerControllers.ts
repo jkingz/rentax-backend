@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { wktToGeoJSON } from '@terraformer/wkt';
 import { Request, Response } from 'express';
 
 const prisma = new PrismaClient();
@@ -73,5 +74,64 @@ export const updateManager = async (
       .status(500)
       .json({ message: `Failed to update manager: ${error.message}` });
     return;
+  }
+};
+
+export const getManagerProperties = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { cognitoId } = req.params;
+
+    // check if manager exists
+    const manager = await prisma.manager.findUnique({
+      where: {
+        cognitoId: cognitoId,
+      },
+    });
+    if (!manager) {
+      res.status(404).json({ message: 'manager not found' });
+      return;
+    }
+
+    // get properties
+    const properties = await prisma.property.findMany({
+      where: {
+        managerCognitoId: cognitoId,
+      },
+      include: {
+        location: true,
+      },
+    });
+
+    // add coordinates to properties
+    const propertiesWithFormattedLocation = await Promise.all(
+      properties.map(async (property) => {
+        const coordinates: { coordinates: string }[] =
+          await prisma.$queryRaw`SELECT ST_asText(coordinates) as coordinates from "Location" where id = ${property.location.id}`;
+
+        const geoJSON: any = wktToGeoJSON(coordinates[0]?.coordinates || '');
+        const longitude = geoJSON.coordinates[0];
+        const latitude = geoJSON.coordinates[1];
+
+        // add coordinates to property
+        const propertyWithCoordinates = {
+          ...property,
+          location: {
+            ...property.location,
+            coordinates: {
+              longitude,
+              latitude,
+            },
+          },
+        };
+      }),
+    );
+    res.json(propertiesWithFormattedLocation);
+  } catch (err: any) {
+    res
+      .status(500)
+      .json({ message: `Error retrieving manager property: ${err.message}` });
   }
 };

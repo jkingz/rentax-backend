@@ -7,9 +7,8 @@ import morgan from 'morgan';
 import { authMiddleware } from './middleware/auth';
 
 // Routes imports
-import tenantRoutes from './routes/tenantRoutes';
 import managerRoutes from './routes/managerRoutes';
-
+import tenantRoutes from './routes/tenantRoutes';
 
 //config
 dotenv.config();
@@ -20,7 +19,28 @@ app.use(helmet.crossOriginResourcePolicy({ policy: 'cross-origin' }));
 app.use(morgan('common'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(cors());
+
+// Define allowed origins
+const allowedOrigins = ['http://localhost:3000'];
+
+// Configure CORS options
+const corsOptions = {
+  origin: function (
+    origin: string | undefined,
+    callback: (err: Error | null, allow?: boolean) => void,
+  ) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', // Explicitly list allowed methods if needed
+};
+// Apply custom CORS middleware with configured options
+app.use(cors(corsOptions));
 
 // Routes
 app.get('/', (req, res) => {

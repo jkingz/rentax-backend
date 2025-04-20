@@ -1,0 +1,4 @@
+@hostname = http://localhost:3001
+
+### Health Check
+GET {{hostname}}/health

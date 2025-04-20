@@ -1,11 +1,10 @@
-import bodyParser from 'body-parser';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import { authMiddleware } from './middleware/auth';
 import logger from './config/logger';
+import { authMiddleware } from './middleware/auth';
 
 // Routes imports
 import applicationRoutes from './routes/applicationRoutes';
@@ -30,12 +29,14 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 } else {
-  app.use(morgan('combined', {
-    stream: {
-      write: (message) => logger.info(message.trim())
-    },
-    skip: (req) => req.url === '/health'
-  }));
+  app.use(
+    morgan('combined', {
+      stream: {
+        write: (message) => logger.info(message.trim()),
+      },
+      skip: (req) => req.url === '/health',
+    }),
+  );
 }
 
 // CORS configuration
@@ -45,7 +46,10 @@ const allowedOrigins = [
 ].filter(Boolean);
 
 const corsOptions = {
-  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+  origin: function (
+    origin: string | undefined,
+    callback: (err: Error | null, allow?: boolean) => void,
+  ) {
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
@@ -55,10 +59,14 @@ const corsOptions = {
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  maxAge: 86400 // CORS preflight cache for 24 hours
+  maxAge: 86400, // CORS preflight cache for 24 hours
 };
 
 app.use(cors(corsOptions));
+
+app.get('/', (req, res) => {
+  res.send('This is home route');
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -73,19 +81,29 @@ app.use('/managers', authMiddleware(['manager']), managerRoutes);
 app.use('/properties', propertyRoutes);
 
 // Global error handling
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  logger.error('Unhandled error:', {
-    error: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    path: req.path,
-    method: req.method,
-    ip: req.ip
-  });
+app.use(
+  (
+    err: Error,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction,
+  ) => {
+    logger.error('Unhandled error:', {
+      error: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+      path: req.path,
+      method: req.method,
+      ip: req.ip,
+    });
 
-  res.status(500).json({
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
-  });
-});
+    res.status(500).json({
+      message:
+        process.env.NODE_ENV === 'development'
+          ? err.message
+          : 'Internal server error',
+    });
+  },
+);
 
 // 404 handler
 app.use((req, res) => {

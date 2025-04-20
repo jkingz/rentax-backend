@@ -43,6 +43,7 @@ if (process.env.NODE_ENV === 'development') {
 const allowedOrigins = [
   'http://localhost:3000',
   process.env.FRONTEND_URL, // Add your production frontend URL
+  'https://main.d29keb0mpkiwh8.amplifyapp.com',
 ].filter(Boolean);
 
 const corsOptions = {

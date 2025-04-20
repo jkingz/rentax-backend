@@ -1,10 +1,11 @@
-import { Request, Response } from "express";
-import { PrismaClient, Prisma } from "@prisma/client";
-import { wktToGeoJSON } from "@terraformer/wkt";
-import { S3Client } from "@aws-sdk/client-s3";
-import { Location } from "@prisma/client";
-import { Upload } from "@aws-sdk/lib-storage";
-import axios from "axios";
+import { S3Client } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
+import { Location, Prisma, PrismaClient } from '@prisma/client';
+import { wktToGeoJSON } from '@terraformer/wkt';
+import axios from 'axios';
+import { Request, Response } from 'express';
+import logger from '../config/logger';
+import { PropertyWithLocation } from '@/types';
 
 const prisma = new PrismaClient();
 
@@ -12,13 +13,12 @@ const s3Client = new S3Client({
   region: process.env.AWS_REGION,
 });
 
-
-
 export const getProperties = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
+    logger.info('Fetching properties with filters', { query: req.query });
     const {
       favoriteIds,
       priceMin,
@@ -41,7 +41,7 @@ export const getProperties = async (
     if (favoriteIds) {
       const favoriteIdsArray = (favoriteIds as string).split(',').map(Number);
       whereConditions.push(
-        Prisma.sql`properties.id IN (${Prisma.join(favoriteIdsArray)})`,
+        Prisma.sql`p.id IN (${Prisma.join(favoriteIdsArray)})`,
       );
     }
 
@@ -157,15 +157,17 @@ export const getProperties = async (
     `;
 
     // Execute the query using Prisma
-    const properties = await prisma.$queryRaw(completeQuery);
-
-    // Return the properties
+    const properties = await prisma.$queryRaw<PropertyWithLocation[]>(completeQuery);
+    logger.info(`Successfully retrieved ${properties.length} properties`);
     res.json(properties);
   } catch (error: any) {
+    logger.error('Failed to retrieve properties:', {
+      error: error.message,
+      stack: error.stack,
+    });
     res
       .status(500)
       .json({ message: `Error retrieving properties: ${error.message}` });
-    return;
   }
 };
 
@@ -173,8 +175,10 @@ export const getProperty = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
+  const { id } = req.params;
   try {
-    const { id } = req.params;
+    logger.info(`Fetching property details`, { propertyId: id });
+
     const property = await prisma.property.findUnique({
       where: { id: Number(id) },
       include: {
@@ -182,27 +186,35 @@ export const getProperty = async (
       },
     });
 
-    if (property) {
-      const coordinates: { coordinates: string }[] =
-        await prisma.$queryRaw`SELECT ST_asText(coordinates) as coordinates from "Location" where id = ${property.location.id}`;
-
-      const geoJSON: any = wktToGeoJSON(coordinates[0]?.coordinates || '');
-      const longitude = geoJSON.coordinates[0];
-      const latitude = geoJSON.coordinates[1];
-
-      const propertyWithCoordinates = {
-        ...property,
-        location: {
-          ...property.location,
-          coordinates: {
-            longitude,
-            latitude,
-          },
-        },
-      };
-      res.json(propertyWithCoordinates);
+    if (!property) {
+      logger.warn('Property not found', { propertyId: id });
+      res.status(404).json({ message: 'Property not found' });
+      return;
     }
+
+    const coordinates: { coordinates: string }[] =
+      await prisma.$queryRaw`SELECT ST_asText(coordinates) as coordinates from "Location" where id = ${property.location.id}`;
+
+    const geoJSON: any = wktToGeoJSON(coordinates[0]?.coordinates || '');
+    const propertyWithCoordinates = {
+      ...property,
+      location: {
+        ...property.location,
+        coordinates: {
+          longitude: geoJSON.coordinates[0],
+          latitude: geoJSON.coordinates[1],
+        },
+      },
+    };
+
+    logger.info('Successfully retrieved property details', { propertyId: id });
+    res.json(propertyWithCoordinates);
   } catch (err: any) {
+    logger.error('Failed to retrieve property:', {
+      propertyId: id,
+      error: err.message,
+      stack: err.stack,
+    });
     res
       .status(500)
       .json({ message: `Error retrieving property: ${err.message}` });
@@ -211,7 +223,7 @@ export const getProperty = async (
 
 export const createProperty = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const files = req.files as Express.Multer.File[];
@@ -225,55 +237,72 @@ export const createProperty = async (
       ...propertyData
     } = req.body;
 
+    logger.info('Creating new property', {
+      managerCognitoId,
+      address,
+      filesCount: files.length,
+    });
+
+    // Upload photos to S3
+    logger.info('Uploading property photos to S3');
     const photoUrls = await Promise.all(
       files.map(async (file) => {
+        const key = `properties/${Date.now()}-${file.originalname}`;
         const uploadParams = {
           Bucket: process.env.S3_BUCKET_NAME!,
-          Key: `properties/${Date.now()}-${file.originalname}`,
+          Key: key,
           Body: file.buffer,
           ContentType: file.mimetype,
         };
 
+        logger.debug('Uploading file to S3', {
+          filename: file.originalname,
+          key,
+        });
         const uploadResult = await new Upload({
           client: s3Client,
           params: uploadParams,
         }).done();
 
         return uploadResult.Location;
-      })
+      }),
     );
+    logger.info(`Successfully uploaded ${photoUrls.length} photos`);
 
+    // Geocode address
+    logger.info('Geocoding property address');
     const geocodingUrl = `https://nominatim.openstreetmap.org/search?${new URLSearchParams(
       {
         street: address,
         city,
         country,
         postalcode: postalCode,
-        format: "json",
-        limit: "1",
-      }
+        format: 'json',
+        limit: '1',
+      },
     ).toString()}`;
+
     const geocodingResponse = await axios.get(geocodingUrl, {
       headers: {
-        "User-Agent": "RealEstateApp (justsomedummyemail@gmail.com",
+        'User-Agent': 'RealEstateApp (justsomedummyemail@gmail.com)',
       },
     });
-    const [longitude, latitude] =
-      geocodingResponse.data[0]?.lon && geocodingResponse.data[0]?.lat
-        ? [
-            parseFloat(geocodingResponse.data[0]?.lon),
-            parseFloat(geocodingResponse.data[0]?.lat),
-          ]
-        : [0, 0];
 
-    // create location
+    const [longitude, latitude] = geocodingResponse.data[0]
+      ? [
+          parseFloat(geocodingResponse.data[0].lon),
+          parseFloat(geocodingResponse.data[0].lat),
+        ]
+      : [0, 0];
+
+    logger.info('Creating location record');
     const [location] = await prisma.$queryRaw<Location[]>`
       INSERT INTO "Location" (address, city, state, country, "postalCode", coordinates)
       VALUES (${address}, ${city}, ${state}, ${country}, ${postalCode}, ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326))
       RETURNING id, address, city, state, country, "postalCode", ST_AsText(coordinates) as coordinates;
     `;
 
-    // create property
+    logger.info('Creating property record');
     const newProperty = await prisma.property.create({
       data: {
         ...propertyData,
@@ -281,15 +310,15 @@ export const createProperty = async (
         locationId: location.id,
         managerCognitoId,
         amenities:
-          typeof propertyData.amenities === "string"
-            ? propertyData.amenities.split(",")
+          typeof propertyData.amenities === 'string'
+            ? propertyData.amenities.split(',')
             : [],
         highlights:
-          typeof propertyData.highlights === "string"
-            ? propertyData.highlights.split(",")
+          typeof propertyData.highlights === 'string'
+            ? propertyData.highlights.split(',')
             : [],
-        isPetsAllowed: propertyData.isPetsAllowed === "true",
-        isParkingIncluded: propertyData.isParkingIncluded === "true",
+        isPetsAllowed: propertyData.isPetsAllowed === 'true',
+        isParkingIncluded: propertyData.isParkingIncluded === 'true',
         pricePerMonth: parseFloat(propertyData.pricePerMonth),
         securityDeposit: parseFloat(propertyData.securityDeposit),
         applicationFee: parseFloat(propertyData.applicationFee),
@@ -303,8 +332,17 @@ export const createProperty = async (
       },
     });
 
+    logger.info('Successfully created new property', {
+      propertyId: newProperty.id,
+      managerId: managerCognitoId,
+    });
     res.status(201).json(newProperty);
   } catch (err: any) {
+    logger.error('Failed to create property:', {
+      error: err.message,
+      stack: err.stack,
+      managerCognitoId: req.body.managerCognitoId,
+    });
     res
       .status(500)
       .json({ message: `Error creating property: ${err.message}` });

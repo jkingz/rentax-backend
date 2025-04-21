@@ -42,8 +42,7 @@ if (process.env.NODE_ENV === 'development') {
 // CORS configuration
 const allowedOrigins = [
   'http://localhost:3000',
-  process.env.FRONTEND_URL, // Add your production frontend URL
-  'https://main.d29keb0mpkiwh8.amplifyapp.com',
+  process.env.FRONTEND_URL,
 ].filter(Boolean);
 
 const corsOptions = {
@@ -64,10 +63,6 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-
-app.get('/', (req, res) => {
-  res.send('This is home route');
-});
 
 // Health check endpoint
 app.get('/health', (req, res) => {

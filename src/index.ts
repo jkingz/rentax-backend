@@ -40,25 +40,28 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // CORS configuration
-const allowedOrigins = [
-  'http://localhost:3000',
-  process.env.FRONTEND_URL,
-].filter(Boolean);
+// const allowedOrigins = [
+//   'http://localhost:3000',
+//   process.env.FRONTEND_URL,
+// ].filter(Boolean);
 
 const corsOptions = {
-  origin: function (
-    origin: string | undefined,
-    callback: (err: Error | null, allow?: boolean) => void,
-  ) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  // origin: function (
+  //   origin: string | undefined,
+  //   callback: (err: Error | null, allow?: boolean) => void,
+  // ) {
+  //   if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+  //     callback(null, true);
+  //   } else {
+  //     callback(new Error('Not allowed by CORS'));
+  //   }
+  // },
+  origin: '*',
   credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  optionsSuccessStatus: 200,
+  preflightContinue: false,
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
   maxAge: 86400, // CORS preflight cache for 24 hours
 };
 

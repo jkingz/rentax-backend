@@ -57,12 +57,12 @@ const corsOptions = {
   //   }
   // },
   origin: '*',
-  credentials: true,
+  // credentials: true,
   optionsSuccessStatus: 200,
   preflightContinue: false,
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
-  maxAge: 86400, // CORS preflight cache for 24 hours
+  // maxAge: 86400, // CORS preflight cache for 24 hours
 };
 
 app.use(cors(corsOptions));

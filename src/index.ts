@@ -22,8 +22,8 @@ app.use(helmet.crossOriginResourcePolicy({ policy: 'cross-origin' }));
 app.disable('x-powered-by');
 
 // Request parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Logging setup based on environment
 if (process.env.NODE_ENV === 'development') {
@@ -39,30 +39,13 @@ if (process.env.NODE_ENV === 'development') {
   );
 }
 
-// CORS configuration
-// const allowedOrigins = [
-//   'http://localhost:3000',
-//   process.env.FRONTEND_URL,
-// ].filter(Boolean);
-
 const corsOptions = {
-  // origin: function (
-  //   origin: string | undefined,
-  //   callback: (err: Error | null, allow?: boolean) => void,
-  // ) {
-  //   if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-  //     callback(null, true);
-  //   } else {
-  //     callback(new Error('Not allowed by CORS'));
-  //   }
-  // },
   origin: '*',
-  // credentials: true,
   optionsSuccessStatus: 200,
   preflightContinue: false,
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
-  // maxAge: 86400, // CORS preflight cache for 24 hours
+  maxAge: 86400, // CORS preflight cache for 24 hours
 };
 
 app.use(cors(corsOptions));

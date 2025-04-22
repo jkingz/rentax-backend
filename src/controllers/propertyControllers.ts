@@ -1,3 +1,4 @@
+import { PropertyWithLocation } from '@/types';
 import { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { Location, Prisma, PrismaClient } from '@prisma/client';
@@ -5,12 +6,15 @@ import { wktToGeoJSON } from '@terraformer/wkt';
 import axios from 'axios';
 import { Request, Response } from 'express';
 import logger from '../config/logger';
-import { PropertyWithLocation } from '@/types';
 
 const prisma = new PrismaClient();
 
 const s3Client = new S3Client({
-  region: process.env.AWS_REGION,
+  region: process.env.S3_AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
 });
 
 export const getProperties = async (
@@ -157,7 +161,9 @@ export const getProperties = async (
     `;
 
     // Execute the query using Prisma
-    const properties = await prisma.$queryRaw<PropertyWithLocation[]>(completeQuery);
+    const properties = await prisma.$queryRaw<PropertyWithLocation[]>(
+      completeQuery,
+    );
     logger.info(`Successfully retrieved ${properties.length} properties`);
     res.json(properties);
   } catch (error: any) {
